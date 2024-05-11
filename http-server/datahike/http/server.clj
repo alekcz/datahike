@@ -180,6 +180,16 @@
             :operationId "transact"},
      :swagger {:tags ["Internal"]}}]])
 
+(defn datahike-routes [config server-connections]
+  (map 
+    (fn [route]
+      (let [method (if (:get (second route)) :get :post)]
+        (assoc-in route [1 method :middleware]
+                  [(partial middleware/token-auth config)
+                    (partial middleware/auth config)])))
+    (concat (create-routes config)
+            (internal-writer-routes server-connections))))
+
 (defn app [config route-opts server-connections]
   (-> (ring/ring-handler
        (ring/router
@@ -189,13 +199,7 @@
                   :swagger {:info {:title       "Datahike API"
                                    :description "Transaction and query functions for Datahike.\n\nThe signatures match those of the Clojure API. All functions take their arguments passed as a vector/list in the POST request body."}}
                   :handler (swagger/create-swagger-handler)}}]]
-         (map (fn [route]
-                (let [method (if (:get (second route)) :get :post)]
-                  (assoc-in route [1 method :middleware]
-                            [(partial middleware/token-auth config)
-                             (partial middleware/auth config)])))
-              (concat (create-routes config)
-                      (internal-writer-routes server-connections)))) route-opts)
+         (datahike-routes config server-connections)) route-opts)
        (ring/routes
         (swagger-ui/create-swagger-ui-handler
          {:path   "/"
@@ -205,7 +209,6 @@
       (wrap-cors :access-control-allow-origin (or (:access-control-allow-origin config)
                                                   [#"http://localhost" #"http://localhost:8080"])
                  :access-control-allow-methods [:get :put :post :delete])))
-
 (defn start-server [config]
   (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {})) config))
 
