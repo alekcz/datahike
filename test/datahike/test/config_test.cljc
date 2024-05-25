@@ -108,7 +108,17 @@
                               :id "store-identity-test"}}
           mem-same   {:store {:backend :mem
                               :id "store-identity-test"
-                              :irrelevant-property true}}]
+                              :irrelevant-property true}}
+          mem-cacheA  {:store {:backend :mem
+                               :id "store-identity-test"}
+                      :store-cache-size 10000
+                      :search-cache-size 5000}
+          mem-cacheB  {:store {:backend :mem
+                              :id "store-identity-test"}
+                       :store-cache-size 20000}
+          mem-cacheC  {:store {:backend :mem
+                              :id "store-identity-test"}
+                       :search-cache-size 20000}]
       (is (thrown-with-msg? Throwable
                             #"Configuration does not match stored configuration."
                             (conn/ensure-stored-config-consistency mem-start mem-other)))
@@ -126,7 +136,13 @@
       (is (nil? (conn/ensure-stored-config-consistency mem-start mem-same)))
       (is (not= mem-start mem-same))
       (is (nil? (conn/ensure-stored-config-consistency mem-named mem-same)))
-      (is (not= mem-named mem-same)))))
+      (is (not= mem-named mem-same))
+      (is (nil? (conn/ensure-stored-config-consistency mem-cacheA mem-cacheB)))
+      (is (not= mem-cacheA mem-cacheB))
+      (is (nil? (conn/ensure-stored-config-consistency mem-cacheA mem-cacheC)))
+      (is (not= mem-cacheA mem-cacheC))
+      (is (nil? (conn/ensure-stored-config-consistency mem-cacheC mem-cacheB)))
+      (is (not= mem-cacheC mem-cacheB)))))
 
 (deftest store-identity-connection-test
   (testing "different connections with equal identities"

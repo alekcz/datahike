@@ -109,11 +109,11 @@
                  :config config}))))
 
 (defn ensure-stored-config-consistency [config stored-config]
-  (let [config (dissoc config :name)
+  (let [config (dissoc config :name :store-cache-size :search-cache-size)
         config (update config :store #(if (get-in stored-config [:store :scope])
                                         %
                                         (dissoc % :scope)))
-        stored-config (dissoc stored-config :initial-tx :name)
+        stored-config (dissoc stored-config :initial-tx :name :store-cache-size :search-cache-size)
         stored-config (merge {:writer dc/self-writer} stored-config)
         stored-config (if (empty? (:index-config stored-config))
                         (dissoc stored-config :index-config)
