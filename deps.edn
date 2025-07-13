@@ -59,7 +59,11 @@
                                ring/ring-core                {:mvn/version "1.9.5"}
                                ring/ring-jetty-adapter       {:mvn/version "1.9.5"}
                                metosin/reitit                {:mvn/version "0.5.18"}
-                               ring-cors/ring-cors           {:mvn/version "0.1.13"}}}
+                               ring-cors/ring-cors           {:mvn/version "0.1.13"}
+
+                               ;; test that stores on path can be loaded at runtime for http server e.g. datahike-jdbc.core
+                               io.replikativ/datahike-jdbc {:mvn/version "0.3.50"}
+                               org.xerial/sqlite-jdbc     {:mvn/version "3.41.2.2"}}}
 
            :datomic {:extra-deps {com.datomic/datomic-free {:mvn/version "0.9.5703"}}}
 

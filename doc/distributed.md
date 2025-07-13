@@ -138,6 +138,34 @@ caching and you often run the same queries many times on different queries (e.g.
 to retrieve a daily context in an app against a database only changes with low
 frequency.)
 
+### Adding additional backends to the server
+
+To allow clients who use backends that are not bundled with datahike, the `:stores` property
+list the backends that should be loaded at run time. When embedded you might see some thing like this:
+
+```clojure
+(:require [datahike.api :as d]
+          [datahike-jdbc.core]
+          [datahike-redis.core])
+
+```
+
+To do the equivalent in datahike-http-server we add the `:stores` property to our config.
+This loads custom backends at run time as long as the required jars are on the classpath. 
+
+```clojure
+{:port     4444
+ :level    :debug
+ :dev-mode true
+ :token    "securerandompassword"
+ :stores ["datahike-jdbc.core" "datahike-redis.core"]}
+```
+
+
+
+
+
+
 # JSON support
 
 The remote API supports JSON with embedded [tagged

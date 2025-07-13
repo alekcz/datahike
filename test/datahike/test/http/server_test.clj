@@ -177,3 +177,105 @@
                  "[\"!set\",[[\"Peter\",42]]]")))
         (finally
           (stop-server server))))))
+
+(defn external-backend-server-tests [server-config client-config]
+  (let [{:keys [format]} client-config
+        server (start-server server-config)]
+    (try
+      (let [new-config (api/create-database {:schema-flexibility :read
+                                             :store {:backend :jdbc
+                                                     :dbname "./external.temp.db"
+                                                     :dbtype "sqlite"}
+                                             :remote-peer        client-config})
+            _          (is (map? new-config))
+
+            conn                                 (api/connect new-config)
+            {:keys [db-before db-after tx-data]} (api/transact conn [{:name "Peter" :age 42}])
+
+            _ (is (seq tx-data))
+
+            _ (is (not= (:commit-id db-before)
+                        (:commit-id db-after)))
+
+            test-db @conn
+            _       (is (= test-db (api/db conn) db-after))
+
+            query '[:find ?n ?a
+                    :in $
+                    :where
+                    [$ ?e :age ?a]
+                    [$ ?e :name ?n]]
+
+            _ (is (= (api/q query test-db)
+                     #{["Peter" 42]}))
+
+            _ (is (map? (api/query-stats query test-db)))
+
+            _ (is (= (api/pull test-db '[:*] 1)
+                     {:db/id 1, :age 42, :name "Peter"}))
+
+            _ (is (= 3 (count (api/datoms test-db :eavt))))
+
+            _ (is (= 3 (count (api/seek-datoms test-db :eavt))))
+
+            _ (is (map? (api/metrics test-db)))
+
+            _ (is (map? (api/schema test-db)))
+
+            _ (is (map? (api/reverse-schema test-db)))
+
+            _ (is (map? (api/entity test-db 1)))
+
+            _ (when-not (= format :edn)
+                (is (= test-db (api/entity-db (api/entity test-db 1)))))
+
+            _ (is (instance? datahike.remote.RemoteSinceDB (api/since test-db (java.util.Date.))))
+
+            _ (is (instance? datahike.remote.RemoteAsOfDB (api/as-of test-db (java.util.Date.))))
+
+            _ (is (nil? (api/release conn)))
+
+            _ (is (nil? (api/delete-database new-config)))
+
+            _ (is (false? (api/database-exists? new-config)))
+
+            new-config (api/create-database {:schema-flexibility :write
+                                             :store {:backend :jdbc
+                                                     :dbname "./external.temp.db"
+                                                     :dbtype "sqlite"}
+                                             :remote-peer        client-config})
+
+            conn (api/connect new-config)
+
+            schema [{:db/ident :name
+                     :db/valueType :db.type/string
+                     :db/cardinality :db.cardinality/one}
+                    {:db/ident :age
+                     :db/valueType :db.type/number
+                     :db/cardinality :db.cardinality/one}]
+
+            _ (api/transact conn schema)
+
+            _ (api/transact conn [{:name "Peter" :age 42}])
+
+            test-db @conn
+            _ (is (= (api/q query test-db)
+                     #{["Peter" 42]}))]
+
+        (is (nil? (api/release conn)))
+        (is (nil? (api/delete-database new-config)))
+        (stop-server server))
+      (finally
+        (stop-server server)))))
+
+(deftest test-external-backend-loaded-at-runtime
+  (testing "Test external backend loaded at runtime."
+    (let [port 23193]
+      (external-backend-server-tests {:port     port
+                                      :join?    false
+                                      :dev-mode false
+                                      :token    "securerandompassword"
+                                      :stores  ["datahike-jdbc.core"]}
+                                     {:backend :datahike-server
+                                      :url     (str "http://localhost:" port)
+                                      :token   "securerandompassword"}))))
