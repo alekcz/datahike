@@ -183,8 +183,8 @@
         server (start-server server-config)]
     (try
       (let [new-config (api/create-database {:schema-flexibility :read
-                                             :store {:backend :jdbc 
-                                                     :dbname "./external.temp.db" 
+                                             :store {:backend :jdbc
+                                                     :dbname "./external.temp.db"
                                                      :dbtype "sqlite"}
                                              :remote-peer        client-config})
             _          (is (map? new-config))
@@ -240,8 +240,8 @@
             _ (is (false? (api/database-exists? new-config)))
 
             new-config (api/create-database {:schema-flexibility :write
-                                             :store {:backend :jdbc 
-                                                     :dbname "./external.temp.db" 
+                                             :store {:backend :jdbc
+                                                     :dbname "./external.temp.db"
                                                      :dbtype "sqlite"}
                                              :remote-peer        client-config})
 
@@ -276,6 +276,6 @@
                                       :dev-mode false
                                       :token    "securerandompassword"
                                       :stores  ["datahike-jdbc.core"]}
-                                      {:backend :datahike-server
+                                     {:backend :datahike-server
                                       :url     (str "http://localhost:" port)
                                       :token   "securerandompassword"}))))
