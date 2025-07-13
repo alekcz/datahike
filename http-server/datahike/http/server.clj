@@ -206,7 +206,19 @@
                                                   [#"http://localhost" #"http://localhost:8080"])
                  :access-control-allow-methods [:get :put :post :delete])))
 
+(defn load-backends [config]
+  (let [backends (:stores config)] ; e.g. {:stores ["datahike-jdbc.core"]}
+    (doseq [backend backends]
+      (try
+        (require (symbol backend))
+        (println "Loaded backend:" backend)
+        (catch Exception e
+          (log/error "Failed to load backend:" backend ". Is it on the classpath?")
+          (log/error e)
+          (throw e))))))
+
 (defn start-server [config]
+  (load-backends config)
   (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {})) config))
 
 (defn stop-server [^org.eclipse.jetty.server.Server server]
