@@ -29,9 +29,11 @@
    [datahike.spec :as spec]
    [datahike.tools :refer [datahike-version datahike-logo]]
    [datahike.impl.entity :as de]
-   [taoensso.timbre :as log]
-   [ring.adapter.jetty :refer [run-jetty]]
-   [spec-tools.core :as st])
+  [taoensso.timbre :as log]
+  [ring.adapter.jetty :refer [run-jetty]]
+  [spec-tools.core :as st]
+  [clojure.core.cache.wrapped :as cw]
+  [datahike.store :as ds])
   (:import [datahike.datom Datom]))
 
 (defn generic-handler [config f]
@@ -122,7 +124,7 @@
                             multipart/multipart-middleware
                             middleware/patch-swagger-json]}})
 
-(defn internal-writer-routes [server-connections]
+(defn internal-writer-routes [server-connections writer-conn-cache]
   [["/delete-database-writer"
     {:post {:parameters  {:body (st/spec {:spec any?
                                           :name "delete-database-writer"})},
@@ -169,8 +171,12 @@
             :handler     (fn [{{:keys [body]} :parameters}]
                            (binding [*connections* server-connections]
                              (try
-                               (let [conn (api/connect (dissoc (first body) :remote-peer :writer)) ;; TODO maybe release?
-                                     res @(apply datahike.writer/transact! conn (rest body))]
+                               (let [cfg      (dissoc (first body) :remote-peer :writer)
+                                     conn-key [(ds/store-identity (:store cfg)) (:branch cfg)]
+                                     conn     (cw/lookup-or-miss writer-conn-cache
+                                                               conn-key
+                                                               (fn [_] (api/connect cfg)))
+                                     res      @(apply datahike.writer/transact! conn (rest body))]
                                  {:status 200
                                   :body   res})
                                (catch Exception e
@@ -180,7 +186,7 @@
             :operationId "transact"},
      :swagger {:tags ["Internal"]}}]])
 
-(defn app [config route-opts server-connections]
+(defn app [config route-opts server-connections writer-conn-cache]
   (-> (ring/ring-handler
        (ring/router
         (concat
@@ -195,7 +201,7 @@
                             [(partial middleware/token-auth config)
                              (partial middleware/auth config)])))
               (concat (create-routes config)
-                      (internal-writer-routes server-connections)))) route-opts)
+                      (internal-writer-routes server-connections writer-conn-cache)))) route-opts)
        (ring/routes
         (swagger-ui/create-swagger-ui-handler
          {:path   "/"
@@ -207,7 +213,8 @@
                  :access-control-allow-methods [:get :put :post :delete])))
 
 (defn start-server [config]
-  (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {})) config))
+  (let [conn-cache (cw/lru-cache-factory {} :threshold 120)]
+    (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {}) conn-cache) config)))
 
 (defn stop-server [^org.eclipse.jetty.server.Server server]
   (.stop server))
