@@ -1,0 +1,24 @@
+;; Example configuration for Datahike server with automatic garbage collection
+{;; Server configuration
+ :port 4000
+ :join? false
+ :level :info
+
+ ;; Authentication token (optional)
+ ;; :token "your-secret-token"
+
+ ;; CORS configuration
+ :access-control-allow-origin [#"http://localhost" #"http://localhost:8080"]
+
+ ;; Cache configuration
+ :cache {:get {:max-age 3600}}
+
+ ;; Automatic Garbage Collection configuration
+ :gc {:enabled true         ;; Enable/disable automatic GC (default: true)
+      :interval-hours 24   ;; Run GC every N hours (default: 24)
+      :retention-days 7}   ;; Keep history for N days (default: 7)
+
+ ;; Backend stores to load at runtime
+ ;; Uncomment if using external backends like datahike-jdbc
+ ;; :stores ["datahike-jdbc.core"]
+}

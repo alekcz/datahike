@@ -38,3 +38,5 @@ trace.edn
 tmp.edn
 .shadow-cljs
 *.temp.*
+.DS_Store
+*/.DS_Store

@@ -8,6 +8,7 @@
    [datahike.connections :refer [*connections*]]
    [datahike.api.specification :refer [api-specification ->url]]
    [datahike.http.middleware :as middleware]
+   [datahike.http.gc-scheduler :as gc-scheduler]
    [datahike.readers :refer [edn-readers]]
    [datahike.transit :as transit]
    [datahike.json :as json]
@@ -50,6 +51,17 @@
 
                   (= f #'api/delete-database)
                   (apply f (dissoc (first body) :remote-peer) (rest body))
+
+                  (= f #'api/connect)
+                  ;; Schedule GC when a connection is made
+                  (let [conn-config (first body)
+                        result (apply f body)]
+                    ;; Schedule GC with 24-hour interval and 7-day retention
+                    (when (get-in config [:gc :enabled] true)
+                      (let [interval-hours (get-in config [:gc :interval-hours] 24)
+                            retention-days (get-in config [:gc :retention-days] 7)]
+                        (gc-scheduler/schedule-gc conn-config interval-hours retention-days)))
+                    result)
 
                   :else
                   (apply f body))]
@@ -222,6 +234,8 @@
   (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {})) config))
 
 (defn stop-server [^org.eclipse.jetty.server.Server server]
+  ;; Clean up GC scheduler on shutdown
+  (gc-scheduler/shutdown)
   (.stop server))
 
 (defn -main [& args]
