@@ -321,6 +321,43 @@ caching and you often run the same queries many times on different queries (e.g.
 to retrieve a daily context in an app against a database only changes with low
 frequency.)
 
+### Adding additional backends to the server
+
+To allow clients who use backends that are not bundled with datahike, the `:stores` property
+lists the konserve backend namespaces that should be loaded and registered at run time.
+When embedded you might require backends directly:
+
+```clojure
+(:require [datahike.api :as d]
+          [datahike.store.loader :as loader])
+
+;; Register backends before use
+(loader/register-backend! :jdbc "konserve-jdbc.core")
+(loader/register-backend! :redis "konserve-redis.core")
+```
+
+To do the equivalent in datahike-http-server we add the `:stores` property to our config.
+This loads and registers konserve backends at run time as long as the required jars are on the classpath.
+
+```clojure
+{:port     4444
+ :level    :debug
+ :dev-mode true
+ :token    "securerandompassword"
+ :stores ["konserve-jdbc.core" "konserve-redis.core"]}
+```
+
+You can also use the explicit map format for clarity:
+
+```clojure
+{:port     4444
+ :level    :debug
+ :dev-mode true
+ :token    "securerandompassword"
+ :stores [{:backend :jdbc  :namespace "konserve-jdbc.core"}
+          {:backend :redis :namespace "konserve-redis.core"}]}
+```
+
 # JSON Support (HTTP Server)
 
 The HTTP server supports JSON with embedded [tagged literals](https://github.com/metosin/jsonista#tagged-json) for language-agnostic integration. This allows non-Clojure clients (JavaScript, Python, etc.) to interact with Datahike using familiar JSON syntax.

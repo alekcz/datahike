@@ -253,7 +253,13 @@
                                                   [#"http://localhost" #"http://localhost:8080"])
                  :access-control-allow-methods [:get :put :post :delete])))
 
+(defn load-stores [config]
+  (doseq [store (:stores config)]
+    (require (symbol store))
+    (log/info :datahike/store-loaded {:store store})))
+
 (defn start-server [config]
+  (load-stores config)
   (run-jetty (app config (default-route-opts muuntaja-with-opts) (atom {})) config))
 
 (defn stop-server [^org.eclipse.jetty.server.Server server]

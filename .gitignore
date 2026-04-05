@@ -50,6 +50,7 @@ dthk
 libdatahike*.zip
 trace.edn
 tmp.edn
+*.temp.db
 .shadow-cljs
 .claude
 repl-mcp.log
