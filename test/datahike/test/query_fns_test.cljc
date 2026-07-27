@@ -455,6 +455,72 @@
                                :where [(fun ?e) ?x]]
                              [1]))))
 
+(deftest test-get-else-lookup-ref-entity
+  ;; Every other entity position in a query accepts a lookup ref; get-else and
+  ;; get-some passed theirs straight to `search`, which cast it to a number —
+  ;; a ClassCastException on BOTH engines for a literal, and on the base engine
+  ;; for an entity arriving as a scalar :in binding.
+  (let [db (d/db-with (db/empty-db {:uid {:db/unique :db.unique/identity
+                                          :db/cardinality :db.cardinality/one}})
+                      [{:db/id 100 :uid "u100" :name "alice" :nick "al"}
+                       {:db/id 101 :uid "u101" :name "bob"}])]
+    (testing "literal lookup ref"
+      (is (= #{["al"]} (d/q '[:find ?v :where [(get-else $ [:uid "u100"] :nick "none") ?v]] db)))
+      (is (= #{["none"]} (d/q '[:find ?v :where [(get-else $ [:uid "u101"] :nick "none") ?v]] db)))
+      (is (= #{[[:nick "al"]]} (d/q '[:find ?v :where [(get-some $ [:uid "u100"] :nick) ?v]] db))))
+
+    (testing "lookup ref through :in"
+      (is (= #{[[:uid "u100"] "al"]}
+             (d/q '[:find ?e ?v :in $ ?e
+                    :where [?e :name ?n] [(get-else $ ?e :nick "none") ?v]]
+                  db [:uid "u100"])))
+      (is (= #{[[:uid "u101"] "none"]}
+             (d/q '[:find ?e ?v :in $ ?e
+                    :where [?e :name ?n] [(get-else $ ?e :nick "none") ?v]]
+                  db [:uid "u101"]))))))
+
+(deftest test-get-else-ground-entity
+  ;; `get-else` on a GROUND entity — written literally, or a var the planner
+  ;; replaced with its :in value. The planner recognizes get-else as a fused
+  ;; optional scan, but with no entity var that scan is standalone rather than
+  ;; an entity-group merge, and only the merge path honours the left-outer
+  ;; semantics: a miss emitted nothing instead of the default.
+  (let [db (d/db-with (db/empty-db)
+                      [{:db/id 100 :name "alice" :nick "al"}
+                       {:db/id 101 :name "bob"}])]
+    (testing "literal entity"
+      (is (= #{["al"]} (d/q '[:find ?v :where [(get-else $ 100 :nick "none") ?v]] db)))
+      (is (= #{["none"]} (d/q '[:find ?v :where [(get-else $ 101 :nick "none") ?v]] db)))
+      (is (= #{["none"]} (d/q '[:find ?v :where [(get-else $ 999 :nick "none") ?v]] db))))
+
+    (testing "entity supplied through :in"
+      (is (= #{["al"]}
+             (d/q '[:find ?v :in $ ?E :where [(get-else $ ?E :nick "none") ?v]] db 100)))
+      (is (= #{["none"]}
+             (d/q '[:find ?v :in $ ?E :where [(get-else $ ?E :nick "none") ?v]] db 101))))
+
+    (testing "a free entity var still fuses as an optional scan"
+      (is (= #{[100 "al"] [101 "none"]}
+             (d/q '[:find ?e ?v
+                    :where [?e :name _] [(get-else $ ?e :nick "none") ?v]]
+                  db))))))
+
+(deftest test-predicate-on-unbindable-var
+  ;; A predicate over a var no clause can bind is unresolvable. The base
+  ;; engine's fixpoint resolver raises "Cannot resolve any more clauses";
+  ;; the planner used to return #{} silently — its executors feed the
+  ;; predicate a nil, the resulting IllegalArgumentException is swallowed
+  ;; as "false", and every row is filtered away. Silently dropping an
+  ;; unresolvable clause is what caused #814 and #815; both engines raise.
+  (let [db (d/db-with (db/empty-db) [{:db/id 1 :name "Ivan"}])]
+    (is (thrown-with-msg? ExceptionInfo #"Cannot resolve any more clauses|Insufficient bindings"
+                          (d/q '[:find ?n :where [?e :name ?n] [(> ?x 1)]] db)))
+    (is (thrown-with-msg? ExceptionInfo #"Cannot resolve any more clauses|Insufficient bindings"
+                          (d/q '[:find ?x :where [(> ?x 1)]] db)))
+    (testing "a predicate whose var IS bound later still resolves"
+      (is (= #{["Ivan"]}
+             (d/q '[:find ?n :where [(= ?n "Ivan")] [?e :name ?n]] db))))))
+
 (deftest test-issue-180
   (is (= #{}
          (d/q '[:find ?e ?a

@@ -205,9 +205,38 @@
        (into {})))
 
 ;; ---------------------------------------------------------------------------
+;; Column-less relations carry a TRUTH VALUE
+;;
+;; A relation with no columns constrains no variable, so all it says is whether
+;; it has a tuple: one empty tuple is TRUE (the identity for hash-join), zero
+;; tuples is FALSE (an annihilator). Losing that distinction — by treating "no
+;; columns" as "no relation" — has produced a family of silent wrong answers:
+;; a disjunction branch read as true when unsatisfied, an existence scan read as
+;; unsatisfied when it matched, and a negation dropped entirely. Prefer these
+;; named constructors over rebuilding the shape inline.
+
+(defn unit-rel
+  "TRUE: no columns, one empty tuple. The identity of hash-join, and what a
+   satisfied column-less test evaluates to."
+  []
+  (->Relation {} [#?(:clj (object-array 0) :cljs (make-array 0))]))
+
+(defn empty-rel
+  "FALSE: no columns and no tuples. Annihilates any join it takes part in."
+  []
+  (->Relation {} []))
+
+;; ---------------------------------------------------------------------------
 ;; Context utilities
 
-(defn limit-rel [rel vars]
+(defn limit-rel
+  "Project `rel` onto `vars`, or nil when it has none of them.
+
+   CAUTION: nil is returned both for a satisfied and for an unsatisfied
+   column-less relation — the truth value is lost. Callers that can receive one
+   must disambiguate on the tuple count before discarding it (see the comment
+   above)."
+  [rel vars]
   (when-some [attrs' (not-empty (select-keys (:attrs rel) vars))]
     (assoc rel :attrs attrs')))
 
@@ -215,6 +244,26 @@
   (assoc context
          :rels (->> (:rels context)
                     (keep #(limit-rel % vars)))))
+
+(defn sub-context
+  "The context a SUB-PLAN runs in: everything non-relational the caller had —
+   `:sources`, `:consts`, `:cancel`, `:settings`, `:rules` — with exactly the
+   relations the caller chose to expose.
+
+   Sub-plan execution sites used to improvise this, and improvised differently:
+   one passed `{:rels [] :sources {}}` and so lost the source bindings (a
+   `$2`-prefixed pattern inside a `not-join` silently fell back to the default
+   db), the cancellation flag (a long negation scan ignored timeouts) and the
+   consts; another passed the caller's relations wholesale into a scope where
+   the same var name means something else.
+
+   Sites that deliberately expose outer relations still build their own context
+   — this names the non-relational part they all need, it does not claim to be
+   the only way a sub-plan may be constructed."
+  [context rels]
+  (-> (select-keys context [:sources :consts :cancel :settings :rules
+                            :rule-accumulators :entity-filters])
+      (assoc :rels (vec rels))))
 
 ;; ---------------------------------------------------------------------------
 ;; Late-binding registry for query engine functions.
